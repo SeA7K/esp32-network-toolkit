@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 from rich.console import Console
@@ -17,29 +18,13 @@ from auto_report import auto_report_from_output
 console = Console()
 
 
-def get_project_root() -> Path:
-    """
-    Sucht Projekt-Root, indem es nach oben läuft und 'host' + 'logs' findet.
-    Funktioniert egal ob:
-    - .../ESP32_Terminal/analysis/python_ui/app.py
-    - .../ESP32_Terminal/python_ui/app.py
-    """
-    cur = Path(__file__).resolve()
-    for _ in range(15):
-        if (cur / "host").exists() and (cur / "logs").exists():
-            return cur
-        cur = cur.parent
-    return Path(__file__).resolve().parents[2]
-
-
-BASE_DIR = get_project_root()
+BASE_DIR = Path(__file__).resolve().parents[2]
 
 LOG_DIR = BASE_DIR / "logs"
 NORM_LOG_DIR = BASE_DIR / "logs_normalized"
 REPORT_DIR = BASE_DIR / "analysis" / "reports"
 
-HOST_DIR = BASE_DIR / "host"
-BASH_DIR = HOST_DIR / "bash"
+BASH_DIR = BASE_DIR / "host" / "bash"
 
 SCRIPTS = {
     "bridge": BASH_DIR / "esp32_bridge.sh",
@@ -290,7 +275,7 @@ def run_report():
         if not lf:
             return
         result = subprocess.run(
-            ["python", str(SCRIPTS["report_gen"]), str(lf)],
+            [sys.executable, str(SCRIPTS["report_gen"]), str(lf)],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -299,7 +284,7 @@ def run_report():
         console.print((result.stdout or "") + (result.stderr or ""))
     else:
         result = subprocess.run(
-            ["python", str(SCRIPTS["report_gen"])],
+            [sys.executable, str(SCRIPTS["report_gen"])],
             capture_output=True,
             text=True,
             encoding="utf-8",

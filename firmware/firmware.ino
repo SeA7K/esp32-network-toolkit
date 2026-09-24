@@ -1,12 +1,13 @@
 #include <WiFi.h>
 #include <SPIFFS.h>
 #include <ESPmDNS.h>
+#include "secrets.h"
 
 // =====================
 // CONFIG (HIER ANPASSEN)
 // =====================
-const char* WIFI_SSID = "WLAN NETZWERK";
-const char* WIFI_PASS = "PASSWORT";
+const char* WIFI_SSID = NETWORK_SSID;
+const char* WIFI_PASS = NETWORK_PASSWORD;
 
 // Discovery-Ports: schneller "lebt"-Check
 const uint16_t DISCOVERY_PORTS[] = { 80, 443, 22, 53, 445, 139 };
@@ -44,6 +45,7 @@ HostMapEntry hostMap[30];
 int hostMapCount = 0;
 
 unsigned long lastMenuPrint = 0;
+bool mdnsStarted = false;
 
 // ========== Utils ==========
 String encTypeName(wifi_auth_mode_t e) {
@@ -70,7 +72,8 @@ IPAddress networkBase(IPAddress ip, IPAddress mask) {
 
 // ========== SPIFFS / Logging ==========
 bool initFS() {
-  if (!SPIFFS.begin(true)) {
+  // Do not format automatically: a mount problem must not erase saved logs.
+  if (!SPIFFS.begin(false)) {
     Serial.println("[FS] SPIFFS mount fehlgeschlagen ❌");
     return false;
   }
@@ -201,10 +204,13 @@ void mdnsBuildMap() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   const char* myHost = "esp32-toolkit";
-  if (!MDNS.begin(myHost)) {
-    Serial.println("[mDNS] Start fehlgeschlagen (ok, kann trotzdem weitergehen).");
-    logLine("mDNS Start fehlgeschlagen.");
-    return;
+  if (!mdnsStarted) {
+    if (!MDNS.begin(myHost)) {
+      Serial.println("[mDNS] Start fehlgeschlagen (ok, kann trotzdem weitergehen).");
+      logLine("mDNS Start fehlgeschlagen.");
+      return;
+    }
+    mdnsStarted = true;
   }
 
   Serial.println("[mDNS] Suche nach Gerätenamen (Services) ...");
@@ -250,11 +256,89 @@ String readLineFromSerial(unsigned long timeoutMs) {
 }
 
 bool parseIP(const String& str, IPAddress& out) {
-  int a, b, c, d;
-  if (sscanf(str.c_str(), "%d.%d.%d.%d", &a, &b, &c, &d) != 4) return false;
-  if (a < 0 || a > 255 || b < 0 || b > 255 || c < 0 || c > 255 || d < 0 || d > 255) return false;
-  out = IPAddress(a, b, c, d);
+  uint16_t octets[4] = {0, 0, 0, 0};
+  int part = 0;
+  int digits = 0;
+
+  if (str.length() == 0) return false;
+  for (unsigned int i = 0; i < str.length(); i++) {
+    char c = str[i];
+    if (c == '.') {
+      if (digits == 0 || part >= 3) return false;
+      part++;
+      digits = 0;
+      continue;
+    }
+    if (c < '0' || c > '9' || digits >= 3) return false;
+    octets[part] = octets[part] * 10 + (c - '0');
+    if (octets[part] > 255) return false;
+    digits++;
+  }
+
+  if (part != 3 || digits == 0) return false;
+  out = IPAddress((uint8_t)octets[0], (uint8_t)octets[1],
+                  (uint8_t)octets[2], (uint8_t)octets[3]);
   return true;
+}
+
+uint32_t ipToInteger(IPAddress ip) {
+  return ((uint32_t)ip[0] << 24) | ((uint32_t)ip[1] << 16) |
+         ((uint32_t)ip[2] << 8) | (uint32_t)ip[3];
+}
+
+IPAddress integerToIP(uint32_t value) {
+  return IPAddress((value >> 24) & 0xFF, (value >> 16) & 0xFF,
+                   (value >> 8) & 0xFF, value & 0xFF);
+}
+
+bool localSubnetRange(uint32_t& firstHost, uint32_t& lastHost) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  uint32_t address = ipToInteger(WiFi.localIP());
+  uint32_t mask = ipToInteger(WiFi.subnetMask());
+  uint32_t network = address & mask;
+  uint32_t broadcast = network | ~mask;
+  if (broadcast <= network || broadcast - network <= 1) {
+    Serial.println("[!] Ungültiger oder zu kleiner WLAN-Subnetzbereich.");
+    logLine("Subnetzbereich ungültig oder zu klein.");
+    return false;
+  }
+
+  uint32_t hostCount = broadcast - network - 1;
+  if (hostCount > 254) {
+    Serial.println("[!] Subnetz hat mehr als 254 nutzbare Adressen; automatische Erkennung abgebrochen.");
+    Serial.println("    Einzelne Ziele im eigenen Subnetz können über Menüpunkt 5 geprüft werden.");
+    logLine("Automatische Erkennung abgebrochen: mehr als 254 Hostadressen.");
+    return false;
+  }
+
+  firstHost = network + 1;
+  lastHost = broadcast - 1;
+  return true;
+}
+
+bool isUsableLocalTarget(IPAddress target) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  IPAddress local = WiFi.localIP();
+  bool targetPrivate = target[0] == 10 ||
+                       (target[0] == 172 && target[1] >= 16 && target[1] <= 31) ||
+                       (target[0] == 192 && target[1] == 168);
+  bool localPrivate = local[0] == 10 ||
+                      (local[0] == 172 && local[1] >= 16 && local[1] <= 31) ||
+                      (local[0] == 192 && local[1] == 168);
+  if (!targetPrivate || !localPrivate) return false;
+
+  IPAddress mask = WiFi.subnetMask();
+  IPAddress network = networkBase(local, mask);
+  IPAddress targetNetwork = networkBase(target, mask);
+  IPAddress broadcast(
+    network[0] | (uint8_t)~mask[0], network[1] | (uint8_t)~mask[1],
+    network[2] | (uint8_t)~mask[2], network[3] | (uint8_t)~mask[3]
+  );
+
+  return targetNetwork == network && target != local &&
+         target != network && target != broadcast;
 }
 
 // ========== Features ==========
@@ -270,6 +354,7 @@ void wifiScan() {
   if (n <= 0) {
     Serial.println("Keine Netze gefunden.");
     logLine("Keine Netze gefunden.");
+    WiFi.scanDelete();
     return;
   }
 
@@ -293,6 +378,7 @@ void wifiScan() {
   }
 
   Serial.println("---------------------------------------------");
+  WiFi.scanDelete();
 }
 
 void portScanSingle(IPAddress target, const String& label) {
@@ -348,8 +434,9 @@ void lanDiscovery() {
   mdnsBuildMap();
 
   IPAddress ip = WiFi.localIP();
-  IPAddress mask = WiFi.subnetMask();
-  IPAddress base = networkBase(ip, mask);
+  uint32_t firstHost, lastHost;
+  if (!localSubnetRange(firstHost, lastHost)) return;
+  IPAddress base = integerToIP(firstHost - 1);
 
   Serial.print("Netz-Basis: ");
   Serial.println(base);
@@ -363,8 +450,8 @@ void lanDiscovery() {
   int found = 0;
   unsigned long start = millis();
 
-  for (int host = 1; host <= 254; host++) {
-    IPAddress target(base[0], base[1], base[2], host);
+  for (uint32_t host = firstHost; host <= lastHost; host++) {
+    IPAddress target = integerToIP(host);
     if (target == ip) continue;
 
     if (hostSeemsAlive(target)) {
@@ -409,8 +496,8 @@ void comboScan() {
 
   // 2) Discovery + Portscan (max 8 Hosts)
   IPAddress ip = WiFi.localIP();
-  IPAddress mask = WiFi.subnetMask();
-  IPAddress base = networkBase(ip, mask);
+  uint32_t firstHost, lastHost;
+  if (!localSubnetRange(firstHost, lastHost)) return;
 
   Serial.println("\n[Combo] Discovery (aktive Hosts) ...");
   logLine("Combo Discovery startet.");
@@ -418,8 +505,8 @@ void comboScan() {
   IPAddress hosts[8];
   int hostCount = 0;
 
-  for (int host = 1; host <= 254; host++) {
-    IPAddress target(base[0], base[1], base[2], host);
+  for (uint32_t host = firstHost; host <= lastHost; host++) {
+    IPAddress target = integerToIP(host);
     if (target == ip) continue;
 
     if (hostSeemsAlive(target)) {
@@ -481,6 +568,12 @@ void scanTargetIPInteractive() {
   if (!parseIP(line, target)) {
     Serial.println("\n[5] Ungültige IP.");
     logLine("[5] Ungültige IP: " + line);
+    return;
+  }
+
+  if (!isUsableLocalTarget(target)) {
+    Serial.println("\n[5] Ziel muss eine nutzbare Adresse im aktuell verbundenen WLAN-Subnetz sein.");
+    logLine("[5] Ziel abgelehnt: nicht im lokalen WLAN-Subnetz oder reservierte Adresse.");
     return;
   }
 

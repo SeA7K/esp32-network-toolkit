@@ -9,9 +9,21 @@ TARGET="${2:-}"
 SECONDS="${3:-35}"
 
 if [[ -z "$TARGET" ]]; then
-  echo "[!] Nutzung: bash host/bash/esp32_target.sh COM3 192.168.2.10 35"
+  echo "[!] Nutzung: ./esp32_target.sh COM3 192.168.2.10 35"
   exit 1
 fi
+
+if [[ ! "$TARGET" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+  echo "[!] Ungültige IPv4-Adresse: $TARGET"
+  exit 1
+fi
+IFS=. read -r OCTET1 OCTET2 OCTET3 OCTET4 <<< "$TARGET"
+for OCTET in "$OCTET1" "$OCTET2" "$OCTET3" "$OCTET4"; do
+  if (( 10#$OCTET > 255 )); then
+    echo "[!] Ungültige IPv4-Adresse: $TARGET"
+    exit 1
+  fi
+done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"

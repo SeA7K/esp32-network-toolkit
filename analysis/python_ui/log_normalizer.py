@@ -1,6 +1,7 @@
 from __future__ import annotations
 import re
 from datetime import datetime
+from ipaddress import IPv4Address, AddressValueError
 from pathlib import Path
 
 
@@ -8,12 +9,14 @@ def extract_ports(text: str) -> list[int]:
     ports = set()
 
     for m in re.finditer(r"OPEN:\s*(\d+)", text):
-        ports.add(int(m.group(1)))
+        port = int(m.group(1))
+        if 1 <= port <= 65535:
+            ports.add(port)
 
     m = re.search(r"(OPEN_PORTS|Open\s*Ports)\s*[:=]\s*([0-9,\s]+)", text, re.IGNORECASE)
     if m:
         for p in m.group(2).replace(" ", "").split(","):
-            if p.isdigit():
+            if p.isdigit() and 1 <= int(p) <= 65535:
                 ports.add(int(p))
 
     return sorted(ports)
@@ -25,7 +28,12 @@ def extract_ip(label: str, text: str) -> str | None:
         text,
         re.IGNORECASE,
     )
-    return m.group(1) if m else None
+    if not m:
+        return None
+    try:
+        return str(IPv4Address(m.group(1)))
+    except AddressValueError:
+        return None
 
 
 def extract_mdns(text: str) -> int | None:

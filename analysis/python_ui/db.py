@@ -5,21 +5,7 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 
 
-def get_project_root() -> Path:
-    """
-    Findet den Projekt-Root, wo 'host/' und 'logs/' liegen.
-    Funktioniert unabhängig vom Startpfad.
-    """
-    cur = Path(__file__).resolve()
-    for _ in range(20):
-        if (cur / "host").exists() and (cur / "logs").exists():
-            return cur
-        cur = cur.parent
-    # Fallback: analysis/python_ui -> analysis -> ESP32_Terminal
-    return Path(__file__).resolve().parents[2]
-
-
-BASE_DIR = get_project_root()
+BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "scans.db"
 

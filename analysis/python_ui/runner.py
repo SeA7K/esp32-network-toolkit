@@ -7,20 +7,15 @@ GIT_BASH = Path(r"C:\Program Files\Git\bin\bash.exe")
 
 
 def _find_project_root(start: Path | str) -> Path:
-    """
-    Findet den Projekt-Root-Ordner.
-    Erwartete Struktur:
-    esp32_terminal/
-      ├─ analysis/
-      ├─ firmware/
-      ├─ logs/
-    """
+    """Find the repository root containing the flat scripts and firmware."""
     p = Path(start).resolve()
+    if p.is_file():
+        p = p.parent
     for parent in [p] + list(p.parents):
-        if (parent / "analysis").exists() and (parent / "firmware").exists():
+        if (parent / "analysis" / "python_ui" / "app.py").is_file() and \
+                (parent / "firmware").is_dir():
             return parent
-    # Fallback: python_ui → analysis → esp32_terminal
-    return p.parents[2]
+    return Path(__file__).resolve().parents[2]
 
 
 def run_bash(script_path: Path, args: list[str]) -> str:

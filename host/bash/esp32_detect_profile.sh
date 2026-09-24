@@ -72,7 +72,7 @@ if (( best_score < 3 )); then
   best="unknown"
 fi
 
-TARGET="$(grep -Eo 'Gateway: [0-9.]+' "$LOGFILE" | awk '{print $2}' | head -n1)"
+TARGET="$(grep -Eo 'Gateway: [0-9.]+' "$LOGFILE" | awk '{print $2}' | head -n1)" || true
 
 echo "=============================="
 echo "AUTO PROFILE"

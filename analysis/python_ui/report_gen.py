@@ -4,10 +4,9 @@ from __future__ import annotations
 import argparse
 import re
 from datetime import datetime
+from ipaddress import IPv4Address, AddressValueError
 from pathlib import Path
 
-# Projekt-Root: .../ESP32_Terminal
-# report_gen.py liegt in: ESP32_Terminal/analysis/python_ui/report_gen.py
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 LOG_DIR = BASE_DIR / "logs"
@@ -32,14 +31,10 @@ def parse_log(text: str) -> dict:
     }
 
     # Gateway
-    m = re.search(r"Gateway:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)", text)
-    if m:
-        data["gateway"] = m.group(1)
+    data["gateway"] = _extract_ipv4("Gateway", text)
 
     # Target (manueller Scan)
-    m = re.search(r"Target:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)", text)
-    if m:
-        data["target"] = m.group(1)
+    data["target"] = _extract_ipv4("Target", text)
 
     # mDNS count
     m = re.search(r"mDNS.*gefunden:\s*(\d+)", text)
@@ -53,7 +48,7 @@ def parse_log(text: str) -> dict:
             pm = re.search(r"OPEN:\s*(\d+)", line)
             if pm:
                 port = int(pm.group(1))
-                if port not in data["open_ports"]:
+                if 1 <= port <= 65535 and port not in data["open_ports"]:
                     data["open_ports"].append(port)
 
     data["open_ports"].sort()
@@ -67,9 +62,9 @@ def risk_rating(open_ports: list[int]) -> tuple[str, list[str]]:
 
     if 80 in open_ports and 443 not in open_ports:
         risk = "MEDIUM"
-        notes.append("HTTP (80) offen, aber kein HTTPS (443) erkannt → Admin-UI könnte unverschlüsselt sein.")
+        notes.append("Port 80 ist offen, Port 443 wurde nicht erkannt; Dienst und Verschlüsselung müssen geprüft werden.")
     if 443 in open_ports:
-        notes.append("HTTPS (443) offen → verschlüsselte Verwaltung möglich (gut).")
+        notes.append("Port 443 ist offen; der angebotene Dienst wurde nicht weiter geprüft.")
     if 53 in open_ports:
         notes.append("DNS (53) offen → normal im LAN (typisch Router).")
 
@@ -80,11 +75,21 @@ def risk_rating(open_ports: list[int]) -> tuple[str, list[str]]:
     return risk, notes
 
 
+def _extract_ipv4(label: str, text: str) -> str | None:
+    match = re.search(rf"{label}:\s*([0-9.]+)", text, re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return str(IPv4Address(match.group(1)))
+    except AddressValueError:
+        return None
+
+
 def guess_scope(data: dict) -> str:
     if data.get("target"):
-        return f"Target-IP Scan gegen {data['target']} (autorisiert, eigenes Netz)."
+        return f"Manuell eingegebene Ziel-IP: {data['target']}. Berechtigung vor dem Scan prüfen."
     if data.get("gateway"):
-        return f"Router/Gateway Scan gegen {data['gateway']} (autorisiert, eigenes Netz)."
+        return f"Im Log erfasstes Gateway: {data['gateway']}. Berechtigung vor dem Scan prüfen."
     return "Unbekannter Scope (Log enthält keine Target/Gateway-Zeile)."
 
 

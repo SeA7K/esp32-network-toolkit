@@ -1,0 +1,4 @@
+#pragma once
+
+#define NETWORK_SSID "WLAN NETZWERK"
+#define NETWORK_PASSWORD "PASSWORT"

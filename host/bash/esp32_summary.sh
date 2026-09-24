@@ -12,9 +12,15 @@ if [[ -z "$LOGFILE" || ! -f "$LOGFILE" ]]; then
   exit 1
 fi
 
-TARGET_IP=$(grep -Eo 'Gateway: [0-9.]+' "$LOGFILE" | awk '{print $2}' | head -n1)
-OPEN_PORTS=$(grep 'OPEN:' "$LOGFILE" | awk '{print $2}' | tr '\n' ',' | sed 's/,$//')
-COUNT=$(grep -c 'OPEN:' "$LOGFILE")
+TARGET_IP=$(grep -Eo 'Gateway: [0-9.]+' "$LOGFILE" | awk '{print $2}' | head -n1) || true
+OPEN_LINES=$(grep -Eo 'OPEN: [0-9]+' "$LOGFILE" || true)
+if [[ -n "$OPEN_LINES" ]]; then
+  OPEN_PORTS=$(printf '%s\n' "$OPEN_LINES" | awk '{print $2}' | sort -n -u | tr '\n' ',' | sed 's/,$//')
+  COUNT=$(printf '%s\n' "$OPEN_PORTS" | tr ',' '\n' | awk 'NF { count++ } END { print count + 0 }')
+else
+  OPEN_PORTS=""
+  COUNT=0
+fi
 
 echo "======================"
 echo "SUMMARY"

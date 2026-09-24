@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from ipaddress import IPv4Address, AddressValueError
 import re
 from datetime import datetime
 from pathlib import Path
@@ -9,8 +10,12 @@ from db import insert_scan
 
 
 def _first_ip(text: str) -> str | None:
-    m = re.search(r"(\d{1,3}(?:\.\d{1,3}){3})", text)
-    return m.group(1) if m else None
+    for match in re.finditer(r"(\d{1,3}(?:\.\d{1,3}){3})", text):
+        try:
+            return str(IPv4Address(match.group(1)))
+        except AddressValueError:
+            continue
+    return None
 
 
 def parse_log(text: str) -> dict:
@@ -43,7 +48,7 @@ def parse_log(text: str) -> dict:
         if raw and raw != "-":
             ports = []
             for p in raw.replace(" ", "").split(","):
-                if p.isdigit():
+                if p.isdigit() and 1 <= int(p) <= 65535:
                     ports.append(int(p))
             data["open_ports"] = sorted(set(ports))
 
@@ -60,11 +65,11 @@ def parse_log(text: str) -> dict:
     # -----------------------
     m = re.search(r"Gateway:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)", text)
     if m:
-        data["gateway"] = m.group(1)
+        data["gateway"] = _first_ip(m.group(1))
 
     m = re.search(r"Target:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)", text)
     if m:
-        data["target"] = m.group(1)
+        data["target"] = _first_ip(m.group(1))
 
     m = re.search(r"mDNS.*gefunden:\s*(\d+)", text)
     if m:
@@ -75,7 +80,9 @@ def parse_log(text: str) -> dict:
         # Beispiele: "OPEN: 80" oder "OPEN:80"
         pm = re.search(r"OPEN:\s*(\d+)", line)
         if pm:
-            ports.add(int(pm.group(1)))
+            port = int(pm.group(1))
+            if 1 <= port <= 65535:
+                ports.add(port)
 
     data["open_ports"] = sorted(ports)
     return data

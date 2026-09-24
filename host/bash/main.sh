@@ -7,7 +7,8 @@ set -euo pipefail
 # Basis-Pfade (absolut)
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ESP32_DIR="$BASE_DIR"
-LOG_DIR="$ESP32_DIR/logs"
+PROJECT_ROOT="$(cd "$BASE_DIR/../.." && pwd)"
+LOG_DIR="$PROJECT_ROOT/logs"
 
 pause() {
   read -r -p "Weiter mit ENTER..."
@@ -72,7 +73,7 @@ esp32_menu() {
           continue
         fi
 
-        LOG_PATH="$ESP32_DIR/$LF"
+        LOG_PATH="$PROJECT_ROOT/$LF"
         if [[ ! -f "$LOG_PATH" ]]; then
           echo "[!] Logdatei nicht gefunden: $LOG_PATH"
           pause
@@ -92,7 +93,7 @@ esp32_menu() {
           continue
         fi
 
-        LOG_PATH="$ESP32_DIR/$LF"
+        LOG_PATH="$PROJECT_ROOT/$LF"
         if [[ ! -f "$LOG_PATH" ]]; then
           echo "[!] Logdatei nicht gefunden: $LOG_PATH"
           pause
@@ -112,7 +113,7 @@ esp32_menu() {
         fi
 
         # 🔧 WICHTIG: relativen Pfad sicher auf absolut auflösen
-        LOG_PATH="$ESP32_DIR/$LF"
+        LOG_PATH="$PROJECT_ROOT/$LF"
 
         if [[ ! -f "$LOG_PATH" ]]; then
           echo "[!] Logdatei nicht gefunden: $LOG_PATH"

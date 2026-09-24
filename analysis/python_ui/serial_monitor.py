@@ -73,8 +73,7 @@ def main() -> int:
     parser.add_argument("--log", default="", help="Optional: Log-Datei (sonst automatisch)")
     args = parser.parse_args()
 
-    # Base: .../ESP32_Terminal
-    base_dir = Path(__file__).resolve().parents[1]
+    base_dir = Path(__file__).resolve().parents[2]
     log_dir = ensure_logs_dir(base_dir)
 
     ports = list_com_ports()

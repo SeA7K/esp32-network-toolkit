@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+logs/
+logs_normalized/
+data/
+reports/
+analysis/reports/
+firmware/secrets.h

@@ -14,7 +14,7 @@ SECONDS="${3:-30}"     # wie lange lesen
 
 # -----------------------------
 # Projekt-Root finden
-# host/bash/esp32_bridge.sh  -> ProjektRoot = 2 Ebenen hoch
+# host/bash/esp32_bridge.sh → Repository-Hauptordner zwei Ebenen höher.
 # -----------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -59,7 +60,7 @@ def generate_report_for_log(log_path: Path) -> tuple[bool, str]:
         return False, f"[AUTO-REPORT] Fehler: report_gen.py nicht gefunden: {report_script}"
 
     p = subprocess.run(
-        ["python", str(report_script), str(log_path)],
+        [sys.executable, str(report_script), str(log_path)],
         capture_output=True,
         text=True,
         encoding="utf-8",
